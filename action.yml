@@ -1,0 +1,54 @@
+name: Readme Doctor
+description: Verify executable commands in README files and report failures on pull requests
+author: Readme Doctor contributors
+
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  file:
+    description: Markdown file to verify
+    required: false
+    default: README.md
+  working-directory:
+    description: Repository directory in which commands run
+    required: false
+    default: .
+  run:
+    description: Execute discovered commands instead of only planning them
+    required: false
+    default: "true"
+  executor:
+    description: Execution backend (docker or local)
+    required: false
+    default: docker
+  network:
+    description: Allow network access inside the Docker sandbox
+    required: false
+    default: "false"
+  image:
+    description: Docker image used for verification
+    required: false
+    default: node:24-bookworm-slim
+  timeout-ms:
+    description: Timeout for each command in milliseconds
+    required: false
+    default: "120000"
+  comment:
+    description: Create or update a report comment on pull requests
+    required: false
+    default: "true"
+  token:
+    description: GitHub token used to create or update pull request comments
+    required: false
+
+outputs:
+  passed:
+    description: Whether every executed command passed
+  report:
+    description: Markdown verification report
+
+runs:
+  using: node24
+  main: packages/action/dist/index.js

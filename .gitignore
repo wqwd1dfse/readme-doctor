@@ -1,0 +1,9 @@
+node_modules/
+packages/core/dist/
+packages/cli/dist/
+packages/action/dist/*.d.ts
+packages/action/dist/*.map
+packages/action/dist/github.js
+*.tsbuildinfo
+.readme-doctor/
+.env

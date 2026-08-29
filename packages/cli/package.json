@@ -1,0 +1,15 @@
+{
+  "name": "readme-doctor",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "readme-doctor": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@readme-doctor/core": "workspace:*"
+  }
+}

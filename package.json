@@ -1,0 +1,17 @@
+{
+  "name": "readme-doctor-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "tsc -b && pnpm --filter @readme-doctor/action bundle",
+    "clean": "tsc -b --clean",
+    "check": "tsc -b --pretty false",
+    "dev": "node packages/cli/dist/index.js check README.md",
+    "test": "node --test packages/core/test/core.test.mjs packages/action/test/github.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0"
+  }
+}

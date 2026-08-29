@@ -1,0 +1,13 @@
+{
+  "name": "@readme-doctor/action",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js"
+  },
+  "dependencies": {
+    "@readme-doctor/core": "workspace:*"
+  }
+}
