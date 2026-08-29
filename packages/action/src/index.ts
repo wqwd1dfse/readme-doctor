@@ -31,6 +31,8 @@ async function main(): Promise<void> {
   const shouldRun = parseBooleanInput("RUN", true);
   const useLocalExecutor = getInput("EXECUTOR", "docker").toLowerCase() === "local";
   const allowNetwork = parseBooleanInput("NETWORK", false);
+  const continueOnError = parseBooleanInput("CONTINUE-ON-ERROR", false);
+  const failOnEmpty = parseBooleanInput("FAIL-ON-EMPTY", false);
   const timeoutMs = Number.parseInt(getInput("TIMEOUT-MS", "120000"), 10);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("timeout-ms must be a positive integer");
@@ -38,6 +40,7 @@ async function main(): Promise<void> {
 
   const markdown = await readFile(sourcePath, "utf8");
   const plan = createPlan(fileInput, parseMarkdown(markdown));
+  const emptyPlanFailed = failOnEmpty && plan.steps.length === 0;
   const results = shouldRun
     ? await executePlan(
         plan,
@@ -47,11 +50,11 @@ async function main(): Promise<void> {
               allowNetwork,
               image: getInput("IMAGE", "node:24-bookworm-slim"),
             }),
-        { cwd: workingDirectory, timeoutMs },
+        { cwd: workingDirectory, timeoutMs, continueOnError },
       )
     : undefined;
   const report = renderMarkdownReport(plan, results);
-  const passed = results ? results.every((result) => result.status === "passed") : true;
+  const passed = !emptyPlanFailed && (results ? results.every((result) => result.status === "passed") : true);
 
   console.log(report);
   await writeSummary(report);

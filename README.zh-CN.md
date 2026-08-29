@@ -25,7 +25,9 @@ Readme Doctor 让文档也进入可测试范围。
 
 | 能力 | 对维护者的价值 |
 | --- | --- |
-| 🔎 自动发现可执行示例 | 识别 `bash`、`sh`、`shell` 和 `console` fenced code block。 |
+| 🔎 自动发现可执行示例 | 识别 `bash`、`sh`、`shell`、`zsh`、`console` 和 `terminal` fenced code block。 |
+| 🧠 代码块状态保持 | 每个代码块作为完整脚本运行，`cd`、`export`、heredoc 和多行命令都能自然工作。 |
+| 🎯 显式执行控制 | 可跳过展示块、失败后继续检查，或在没有可执行示例时主动失败。 |
 | 📍 精确源位置 | 每个结果都带 README 章节和从 1 开始的原始行号。 |
 | 🐳 一次性 Docker 沙箱 | 在全新的内存工作区运行示例，避免直接污染宿主机。 |
 | 🔒 默认安全执行 | 默认禁网、移除 Linux capabilities、只读根文件系统并限制资源。 |
@@ -91,14 +93,16 @@ jobs:
 
 ## 哪些内容会被执行？
 
-Readme Doctor 当前识别四种 fenced-code 语言：
+Readme Doctor 当前识别六种 fenced-code 语言：
 
 - `bash`
 - `sh`
 - `shell`
+- `zsh`
 - `console`
+- `terminal`
 
-在 `bash`、`sh` 和 `shell` 块中，每一条非空、非注释行都会成为命令。在 `console` 块中，只有以 `$ ` 开头的行是命令，输出行会被忽略。
+Shell 块会作为完整脚本运行，因此同一块内的状态能够保留。`bash` 与 `zsh` 块使用同名 Shell（所选镜像必须提供它），其他语言使用 `sh`。在 `console` 和 `terminal` 块中，只有以 `$ ` 开头的行会被收集，终端输出会被忽略。每个代码块在报告中对应一个执行步骤。
 
 例如，下面这段 Markdown 表示两条命令：
 
@@ -110,6 +114,12 @@ Tests: 18 passed
 &#96;&#96;&#96;</code></pre>
 
 距离最近的上一个 Markdown 标题会成为报告章节；原始行号会贯穿解析、执行、报告和 GitHub annotation 的全过程。
+
+如果某个 Shell 示例只用于展示、不应执行，请紧挨代码块前加入：
+
+```html
+<!-- readme-doctor: ignore-next -->
+```
 
 ## 常用配置
 
@@ -147,6 +157,15 @@ Tests: 18 passed
     run: "false"
 ```
 
+### 某块失败后继续检查
+
+```yaml
+- uses: wqwd1dfse/readme-doctor@v1
+  with:
+    continue-on-error: "true"
+    fail-on-empty: "true"
+```
+
 ### 使用 Action 输出
 
 ```yaml
@@ -172,6 +191,8 @@ Tests: 18 passed
 | `network` | `false` | 是否允许 Docker 沙箱访问网络。 |
 | `image` | `node:24-bookworm-slim` | 验证使用的 Docker 镜像。 |
 | `timeout-ms` | `120000` | 每条命令的超时时间，单位为毫秒。 |
+| `continue-on-error` | `false` | 某个代码块失败后继续检查后续代码块；超时始终停止执行。 |
+| `fail-on-empty` | `false` | 没有发现可执行示例时失败，而不是静默通过。 |
 | `comment` | `true` | 当事件上下文和权限允许时，创建或更新 PR 评论。 |
 | `token` | — | PR 评论使用的 GitHub token，通常为 `${{ secrets.GITHUB_TOKEN }}`。 |
 
@@ -238,6 +259,12 @@ node packages/cli/dist/index.js check README.md --run --network
 node packages/cli/dist/index.js check README.md --run --executor=local
 ```
 
+检查全部代码块，并拒绝空计划：
+
+```text
+node packages/cli/dist/index.js check README.md --run --continue-on-error --fail-on-empty
+```
+
 ## 最适合的项目
 
 Readme Doctor 特别适合：
@@ -253,10 +280,9 @@ Readme Doctor 特别适合：
 
 Readme Doctor 目前刻意保持小而明确：
 
-- 尚不会拼接多行 Shell 命令；
-- `cd`、`export` 等 Shell 状态不会在单独命令行之间保留；
-- 命令按顺序执行，并在第一个失败处停止；
-- 只识别 Shell/console fenced block；
+- 代码块按顺序执行，默认在第一个失败代码块处停止；
+- `console` 和 `terminal` 终端记录目前只支持 `$ ` 提示符；
+- 默认 Docker executor 使用 POSIX `sh`，示例必须与所选镜像兼容；
 - 暂无项目配置文件和环境变量 fixture 系统；
 - fork PR 评论取决于 GitHub token 权限。
 
@@ -276,9 +302,8 @@ examples         小型兼容性 fixture
 
 ## 路线图
 
-- 多行 Shell 命令支持；
-- 持久化目录和环境变量语义；
 - 必需环境变量检测与 fixture；
+- 按标题 include/exclude 的筛选能力；
 - Node.js 运行时矩阵；
 - 来自真实开源仓库的兼容性 fixture；
 - 发布 npm CLI 包。

@@ -12,10 +12,13 @@ export class LocalShellExecutor implements CommandExecutor {
     const startedAt = Date.now();
 
     return new Promise((resolve) => {
-      const child = spawn(step.command, {
+      const isWindows = process.platform === "win32";
+      const executable = isWindows ? step.command : shellForLanguage(step.language);
+      const args = isWindows ? [] : ["-ec", step.command];
+      const child = spawn(executable, args, {
         cwd: options.cwd,
         env: { ...process.env, ...options.env },
-        shell: true,
+        shell: isWindows,
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";
@@ -57,6 +60,10 @@ export class LocalShellExecutor implements CommandExecutor {
   }
 }
 
+function shellForLanguage(language: ExecutionStep["language"]): string {
+  return language === "bash" || language === "zsh" ? language : "sh";
+}
+
 export async function executePlan(
   plan: ExecutionPlan,
   executor: CommandExecutor,
@@ -69,7 +76,7 @@ export async function executePlan(
     for (const step of plan.steps) {
       const result = await executor.execute(step, options);
       results.push(result);
-      if (result.status !== "passed" && !options.continueOnError) break;
+      if (result.status === "timed_out" || (result.status !== "passed" && !options.continueOnError)) break;
     }
   } finally {
     await executor.dispose?.();

@@ -25,7 +25,9 @@ Readme Doctor makes documentation part of the test surface.
 
 | Capability | What it means for maintainers |
 | --- | --- |
-| 🔎 Executable example discovery | Finds commands in `bash`, `sh`, `shell`, and `console` fenced blocks. |
+| 🔎 Executable example discovery | Finds scripts in `bash`, `sh`, `shell`, `zsh`, `console`, and `terminal` fenced blocks. |
+| 🧠 Stateful code blocks | Runs each block as one script, so `cd`, `export`, heredocs, and multiline commands behave naturally. |
+| 🎯 Explicit control | Skip illustrative blocks, check every block after failures, or fail when no runnable examples are found. |
 | 📍 Exact source locations | Every result includes the README section and 1-based line number. |
 | 🐳 Disposable Docker sandbox | Runs examples away from the host with a fresh in-memory workspace. |
 | 🔒 Secure-by-default execution | No network, no Linux capabilities, read-only root filesystem, and resource limits by default. |
@@ -91,14 +93,16 @@ For examples that do not need downloads, remove `network: "true"` and keep the s
 
 ## What counts as an executable example?
 
-Readme Doctor currently recognizes four fenced-code languages:
+Readme Doctor recognizes six fenced-code languages:
 
 - `bash`
 - `sh`
 - `shell`
+- `zsh`
 - `console`
+- `terminal`
 
-In `bash`, `sh`, and `shell` blocks, every non-empty, non-comment line becomes a command. In `console` blocks, only lines beginning with `$ ` are commands; output lines are ignored.
+Shell blocks run as complete scripts, preserving state between their lines. `bash` and `zsh` blocks use their named shell (which must exist in the selected image); the other languages use `sh`. In `console` and `terminal` blocks, only lines beginning with `$ ` are collected; transcript output is ignored. Each code block is one reported execution step.
 
 For example, this Markdown represents two commands:
 
@@ -110,6 +114,12 @@ Tests: 18 passed
 &#96;&#96;&#96;</code></pre>
 
 The nearest preceding Markdown heading becomes the report section, and the original line number travels through parsing, execution, reporting, and GitHub annotations.
+
+To keep a shell example for display without executing it, place this marker immediately before the block:
+
+```html
+<!-- readme-doctor: ignore-next -->
+```
 
 ## Common configurations
 
@@ -147,6 +157,15 @@ The nearest preceding Markdown heading becomes the report section, and the origi
     run: "false"
 ```
 
+### Keep checking after a failed block
+
+```yaml
+- uses: wqwd1dfse/readme-doctor@v1
+  with:
+    continue-on-error: "true"
+    fail-on-empty: "true"
+```
+
 ### Consume Action outputs
 
 ```yaml
@@ -172,6 +191,8 @@ The nearest preceding Markdown heading becomes the report section, and the origi
 | `network` | `false` | Allow network access inside the Docker sandbox. |
 | `image` | `node:24-bookworm-slim` | Docker image used for verification. |
 | `timeout-ms` | `120000` | Timeout for each command, in milliseconds. |
+| `continue-on-error` | `false` | Continue with later code blocks after a block fails. Timeouts always stop execution. |
+| `fail-on-empty` | `false` | Fail instead of silently passing when no executable examples are found. |
 | `comment` | `true` | Create or update a PR comment when event context and permissions allow it. |
 | `token` | — | GitHub token used for PR comments. Usually `${{ secrets.GITHUB_TOKEN }}`. |
 
@@ -238,6 +259,12 @@ Use the host shell only for a repository you fully trust:
 node packages/cli/dist/index.js check README.md --run --executor=local
 ```
 
+Check all blocks and reject an empty plan:
+
+```text
+node packages/cli/dist/index.js check README.md --run --continue-on-error --fail-on-empty
+```
+
 ## Where it fits best
 
 Readme Doctor is especially useful for:
@@ -253,10 +280,9 @@ Readme Doctor is especially useful for:
 
 Readme Doctor is intentionally small and explicit today:
 
-- multiline shell commands are not yet joined;
-- shell state such as `cd` and `export` does not persist between individual command lines;
-- commands run sequentially and execution stops on the first failure;
-- only shell/console fenced blocks are recognized;
+- code blocks run sequentially; by default execution stops on the first failed block;
+- `console` and `terminal` transcripts support `$ ` prompts only;
+- the default Docker executor uses POSIX `sh`, so examples must be compatible with the selected image;
 - there is no project configuration file or environment-variable fixture system yet;
 - PR comments on fork contributions depend on GitHub token permissions.
 
@@ -276,9 +302,8 @@ Read the [architecture document](docs/ARCHITECTURE.md) for module boundaries, da
 
 ## Roadmap
 
-- multiline shell command support;
-- persistent directory and environment semantics;
 - required environment-variable detection and fixtures;
+- include/exclude filters by heading;
 - Node.js runtime matrices;
 - compatibility fixtures from real open-source repositories;
 - a published npm CLI package.

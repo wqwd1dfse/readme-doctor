@@ -23,5 +23,5 @@ export function renderMarkdownReport(plan: ExecutionPlan, results?: ExecutionRes
 }
 
 function escapeCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/`/g, "\\`");
+  return value.replace(/\|/g, "\\|").replace(/`/g, "\\`").replace(/\r?\n/g, "<br>");
 }

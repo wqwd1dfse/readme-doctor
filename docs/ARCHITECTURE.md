@@ -54,10 +54,12 @@ Markdown Parser ──► Command Blocks ──► Planner ──► Execution P
 ```ts
 type CommandBlock = {
   id: string;
-  language: "bash" | "sh" | "shell" | "console";
+  language: "bash" | "sh" | "shell" | "zsh" | "console" | "terminal";
   heading: string | null;
   startLine: number;
   endLine: number;
+  script: string;
+  sourceLine: number;
   commands: Array<{ value: string; sourceLine: number }>;
 };
 
@@ -113,7 +115,7 @@ README 命令等价于仓库代码，不能因为它位于 Markdown 就视为安
 - `2`：配置或 Markdown 无法解析。
 - `3`：执行基础设施异常。
 
-单条命令失败后 MVP 默认停止，避免后续结果被污染；将来可由 `continueOnError` 控制。
+每个 fenced code block 作为一个完整脚本步骤执行，块内目录和环境变量状态自然保留。代码块失败后默认停止，`continueOnError` 可让计划继续检查后续块；超时始终停止。
 
 ## 8. 可演进方向
 

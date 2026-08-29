@@ -1,4 +1,4 @@
-export const SUPPORTED_SHELL_LANGUAGES = ["bash", "sh", "shell", "console"] as const;
+export const SUPPORTED_SHELL_LANGUAGES = ["bash", "sh", "shell", "zsh", "console", "terminal"] as const;
 
 export type ShellLanguage = (typeof SUPPORTED_SHELL_LANGUAGES)[number];
 
@@ -13,6 +13,8 @@ export interface CommandBlock {
   heading: string | null;
   startLine: number;
   endLine: number;
+  script: string;
+  sourceLine: number;
   commands: ParsedCommand[];
 }
 
@@ -22,6 +24,7 @@ export interface ExecutionStep {
   command: string;
   sourceLine: number;
   heading: string | null;
+  language: ShellLanguage;
 }
 
 export interface ExecutionPlan {

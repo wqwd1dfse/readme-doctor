@@ -1,14 +1,15 @@
 import type { CommandBlock, ExecutionPlan } from "./types.js";
 
 export function createPlan(sourcePath: string, blocks: CommandBlock[]): ExecutionPlan {
-  const steps = blocks.flatMap((block) =>
-    block.commands.map((command, index) => ({
-      id: `${block.id}-step-${index + 1}`,
+  const steps = blocks.map((block) =>
+    ({
+      id: `${block.id}-step-1`,
       blockId: block.id,
-      command: command.value,
-      sourceLine: command.sourceLine,
+      command: block.script,
+      sourceLine: block.sourceLine,
       heading: block.heading,
-    })),
+      language: block.language,
+    }),
   );
 
   return { sourcePath, steps };

@@ -18,17 +18,21 @@ const useLocalExecutor = args.includes("--executor=local");
 const allowNetwork = args.includes("--network");
 const imageArg = args.find((arg) => arg.startsWith("--image="));
 const image = imageArg?.slice("--image=".length);
+const continueOnError = args.includes("--continue-on-error");
+const failOnEmpty = args.includes("--fail-on-empty");
 
 if (command !== "check") {
-  console.error("Usage: readme-doctor check [README.md] [--run] [--network] [--image=node:24-bookworm-slim] [--executor=local]");
+  console.error("Usage: readme-doctor check [README.md] [--run] [--network] [--image=node:24-bookworm-slim] [--executor=local] [--continue-on-error] [--fail-on-empty]");
   process.exitCode = 2;
 } else {
   try {
     const markdown = await readFile(sourcePath, "utf8");
     const plan = createPlan(sourcePath, parseMarkdown(markdown));
+    const emptyPlanFailed = failOnEmpty && plan.steps.length === 0;
 
     if (!shouldRun) {
       console.log(renderMarkdownReport(plan));
+      if (emptyPlanFailed) process.exitCode = 1;
     } else {
       const executor = useLocalExecutor
         ? new LocalShellExecutor()
@@ -36,9 +40,10 @@ if (command !== "check") {
       const results = await executePlan(plan, executor, {
         cwd: dirname(sourcePath),
         timeoutMs: 120_000,
+        continueOnError,
       });
       console.log(renderMarkdownReport(plan, results));
-      if (results.some((result) => result.status !== "passed")) process.exitCode = 1;
+      if (emptyPlanFailed || results.some((result) => result.status !== "passed")) process.exitCode = 1;
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

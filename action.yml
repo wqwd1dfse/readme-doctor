@@ -35,6 +35,14 @@ inputs:
     description: Timeout for each command in milliseconds
     required: false
     default: "120000"
+  continue-on-error:
+    description: Check every code block even after one fails
+    required: false
+    default: "false"
+  fail-on-empty:
+    description: Fail when the Markdown file contains no executable examples
+    required: false
+    default: "false"
   comment:
     description: Create or update a report comment on pull requests
     required: false

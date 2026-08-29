@@ -33,7 +33,7 @@ var DockerExecutor = class {
   }
   async execute(step, options) {
     const startedAt = Date.now();
-    const result = await runProcess("docker", ["exec", this.containerName, "sh", "-lc", step.command], options.timeoutMs, this.config.maxOutputBytes);
+    const result = await runProcess("docker", ["exec", this.containerName, shellForLanguage(step.language), "-ec", step.command], options.timeoutMs, this.config.maxOutputBytes);
     return {
       stepId: step.id,
       status: result.timedOut ? "timed_out" : result.exitCode === 0 ? "passed" : "failed",
@@ -50,6 +50,9 @@ var DockerExecutor = class {
     this.isCreated = false;
   }
 };
+function shellForLanguage(language) {
+  return language === "bash" || language === "zsh" ? language : "sh";
+}
 function createDockerCreateArgs(containerName, sourceDirectory, config) {
   return [
     "create",
@@ -112,10 +115,13 @@ var LocalShellExecutor = class {
   async execute(step, options) {
     const startedAt = Date.now();
     return new Promise((resolve2) => {
-      const child = spawn2(step.command, {
+      const isWindows = process.platform === "win32";
+      const executable = isWindows ? step.command : shellForLanguage2(step.language);
+      const args = isWindows ? [] : ["-ec", step.command];
+      const child = spawn2(executable, args, {
         cwd: options.cwd,
         env: { ...process.env, ...options.env },
-        shell: true,
+        shell: isWindows,
         stdio: ["ignore", "pipe", "pipe"]
       });
       let stdout = "";
@@ -152,6 +158,9 @@ var LocalShellExecutor = class {
     });
   }
 };
+function shellForLanguage2(language) {
+  return language === "bash" || language === "zsh" ? language : "sh";
+}
 async function executePlan(plan, executor, options) {
   const results = [];
   await executor.setup?.(options);
@@ -159,7 +168,7 @@ async function executePlan(plan, executor, options) {
     for (const step of plan.steps) {
       const result = await executor.execute(step, options);
       results.push(result);
-      if (result.status !== "passed" && !options.continueOnError)
+      if (result.status === "timed_out" || result.status !== "passed" && !options.continueOnError)
         break;
     }
   } finally {
@@ -169,7 +178,7 @@ async function executePlan(plan, executor, options) {
 }
 
 // ../core/dist/types.js
-var SUPPORTED_SHELL_LANGUAGES = ["bash", "sh", "shell", "console"];
+var SUPPORTED_SHELL_LANGUAGES = ["bash", "sh", "shell", "zsh", "console", "terminal"];
 
 // ../core/dist/parse-markdown.js
 var isShellLanguage = (value) => SUPPORTED_SHELL_LANGUAGES.includes(value);
@@ -177,30 +186,52 @@ function parseMarkdown(markdown) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks = [];
   let heading = null;
+  let ignoreNext = false;
+  let nonExecutableFenceMarker = null;
   let fence = null;
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
     if (!fence) {
+      if (nonExecutableFenceMarker) {
+        const closingPattern2 = nonExecutableFenceMarker === "`" ? /^\s*`{3,}\s*$/ : /^\s*~{3,}\s*$/;
+        if (closingPattern2.test(line))
+          nonExecutableFenceMarker = null;
+        return;
+      }
+      if (/<!--\s*readme-doctor:\s*ignore-next\s*-->/i.test(line)) {
+        ignoreNext = true;
+        return;
+      }
       const headingMatch = line.match(/^#{1,6}\s+(.+?)\s*#*$/);
       if (headingMatch)
         heading = headingMatch[1] ?? null;
       const opening = line.match(/^\s*(`{3,}|~{3,})\s*([^\s{]*)/);
       const language = opening?.[2]?.toLowerCase() ?? "";
       if (opening?.[1] && isShellLanguage(language)) {
+        if (ignoreNext) {
+          ignoreNext = false;
+          nonExecutableFenceMarker = opening[1][0] ?? "`";
+          return;
+        }
         fence = { marker: opening[1][0] ?? "`", language, startLine: lineNumber, lines: [] };
+      } else if (opening?.[1]) {
+        nonExecutableFenceMarker = opening[1][0] ?? "`";
       }
       return;
     }
     const closingPattern = fence.marker === "`" ? /^\s*`{3,}\s*$/ : /^\s*~{3,}\s*$/;
     if (closingPattern.test(line)) {
       const commands = extractCommands(fence.language, fence.lines, fence.startLine + 1);
-      if (commands.length > 0) {
+      const script = extractScript(fence.language, fence.lines, commands);
+      if (commands.length > 0 && script.value.length > 0) {
         blocks.push({
           id: `block-${blocks.length + 1}`,
           language: fence.language,
           heading,
           startLine: fence.startLine,
           endLine: lineNumber,
+          script: script.value,
+          sourceLine: script.sourceLine,
           commands
         });
       }
@@ -212,21 +243,38 @@ function parseMarkdown(markdown) {
   return blocks;
 }
 function extractCommands(language, lines, firstLine) {
-  if (language === "console") {
+  if (language === "console" || language === "terminal") {
     return lines.map((line, index) => ({ value: line.replace(/^\s*\$\s+/, "").trim(), sourceLine: firstLine + index, isCommand: /^\s*\$\s+/.test(line) })).filter(({ value, isCommand }) => isCommand && value.length > 0).map(({ value, sourceLine }) => ({ value, sourceLine }));
   }
   return lines.map((line, index) => ({ value: line.trim(), sourceLine: firstLine + index })).filter(({ value }) => value.length > 0 && !value.startsWith("#"));
 }
+function extractScript(language, lines, commands) {
+  if (language === "console" || language === "terminal") {
+    return {
+      value: commands.map(({ value }) => value).join("\n"),
+      sourceLine: commands[0]?.sourceLine ?? 0
+    };
+  }
+  const first = lines.findIndex((line) => line.trim().length > 0);
+  let last = lines.length - 1;
+  while (last >= 0 && lines[last]?.trim().length === 0)
+    last -= 1;
+  return {
+    value: first < 0 ? "" : lines.slice(first, last + 1).join("\n"),
+    sourceLine: commands[0]?.sourceLine ?? 0
+  };
+}
 
 // ../core/dist/planner.js
 function createPlan(sourcePath, blocks) {
-  const steps = blocks.flatMap((block) => block.commands.map((command, index) => ({
-    id: `${block.id}-step-${index + 1}`,
+  const steps = blocks.map((block) => ({
+    id: `${block.id}-step-1`,
     blockId: block.id,
-    command: command.value,
-    sourceLine: command.sourceLine,
-    heading: block.heading
-  })));
+    command: block.script,
+    sourceLine: block.sourceLine,
+    heading: block.heading,
+    language: block.language
+  }));
   return { sourcePath, steps };
 }
 
@@ -248,7 +296,7 @@ function renderMarkdownReport(plan, results) {
   return lines.join("\n");
 }
 function escapeCell(value) {
-  return value.replace(/\|/g, "\\|").replace(/`/g, "\\`");
+  return value.replace(/\|/g, "\\|").replace(/`/g, "\\`").replace(/\r?\n/g, "<br>");
 }
 
 // src/github.ts
@@ -306,22 +354,25 @@ async function main() {
   const shouldRun = parseBooleanInput("RUN", true);
   const useLocalExecutor = getInput("EXECUTOR", "docker").toLowerCase() === "local";
   const allowNetwork = parseBooleanInput("NETWORK", false);
+  const continueOnError = parseBooleanInput("CONTINUE-ON-ERROR", false);
+  const failOnEmpty = parseBooleanInput("FAIL-ON-EMPTY", false);
   const timeoutMs = Number.parseInt(getInput("TIMEOUT-MS", "120000"), 10);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("timeout-ms must be a positive integer");
   }
   const markdown = await readFile(sourcePath, "utf8");
   const plan = createPlan(fileInput, parseMarkdown(markdown));
+  const emptyPlanFailed = failOnEmpty && plan.steps.length === 0;
   const results = shouldRun ? await executePlan(
     plan,
     useLocalExecutor ? new LocalShellExecutor() : new DockerExecutor({
       allowNetwork,
       image: getInput("IMAGE", "node:24-bookworm-slim")
     }),
-    { cwd: workingDirectory, timeoutMs }
+    { cwd: workingDirectory, timeoutMs, continueOnError }
   ) : void 0;
   const report = renderMarkdownReport(plan, results);
-  const passed = results ? results.every((result) => result.status === "passed") : true;
+  const passed = !emptyPlanFailed && (results ? results.every((result) => result.status === "passed") : true);
   console.log(report);
   await writeSummary(report);
   await writeOutputs(passed, report);

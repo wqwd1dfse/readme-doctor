@@ -66,7 +66,7 @@ export class DockerExecutor implements CommandExecutor {
     const startedAt = Date.now();
     const result = await runProcess(
       "docker",
-      ["exec", this.containerName, "sh", "-lc", step.command],
+      ["exec", this.containerName, shellForLanguage(step.language), "-ec", step.command],
       options.timeoutMs,
       this.config.maxOutputBytes,
     );
@@ -86,6 +86,10 @@ export class DockerExecutor implements CommandExecutor {
     await runProcess("docker", ["rm", "--force", this.containerName], 30_000, this.config.maxOutputBytes);
     this.isCreated = false;
   }
+}
+
+function shellForLanguage(language: ExecutionStep["language"]): string {
+  return language === "bash" || language === "zsh" ? language : "sh";
 }
 
 export function createDockerCreateArgs(
